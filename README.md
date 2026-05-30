@@ -191,18 +191,22 @@ clang myprog.c -I install/include -L install/lib -lbbhutil \
 
 ## Known issues
 
-- **xvs opens, but its plot canvas can't render on XQuartz; pushing data exits
-  it.** Sending an SDF with `sdftoxvs` triggers a cascade of X errors on the GL
-  plot canvas — a `BadDrawable` on `X_CopyArea` (xforms' backing-store blit)
-  **and** `GLXBadCurrentWindow` on `glXSwapBuffers` — and Xlib's default handler
-  turns the first into `exit()`. Deterministic on the data push, not random.
-  Installing a non-fatal `XSetErrorHandler` *does* stop the exit, but then the
-  canvas comes up **blank and the buttons are dead** — so the errors are real
-  (an invalid GL drawable/window), not spurious, and suppressing them is not a
-  fix. The root cause is xvs's GL-canvas window/context setup on XQuartz;
-  notably **DV renders fine through the same XQuartz GLX**, so this is an
-  xvs-specific setup bug, not an XQuartz limitation — but it remains unfixed.
-  **Practical workaround: use DV for 1D data**, which it handles natively.
+- **xvs opens, but pushing data exits it on XQuartz.** Root cause confirmed by
+  lldb backtrace: when the first SDF arrives via `sdftoxvs`, xvs's
+  `xvs_open_and_repanel` tears down and rebuilds its plot panels, then fires an
+  xforms `redraw` that blits a widget's double-buffer backing pixmap
+  (`fli_show_object_pixmap` → `X_CopyArea`) to a **window the repanel just
+  invalidated** → `BadDrawable`, which Xlib's default handler turns into
+  `exit()`. Deterministic on the data push. The `GLXBadCurrentWindow` GL errors
+  seen with a debug error-handler are *downstream* symptoms, **not** the cause —
+  and GL context-sharing is not involved either (a no-share build crashes
+  identically). A blanket `XSetErrorHandler` stops the exit but leaves a blank
+  canvas with dead buttons, because `fli_show_object_pixmap` then sets
+  `form->window` to the same stale handle — so suppression isn't a fix. A real
+  fix means reworking xvs's realize-before-redraw ordering in the repanel path
+  (`xvs_open_and_repanel` / `mfl.c`); involved and currently unfixed. **DV
+  doesn't repanel on data arrival, so it's unaffected — practical workaround:
+  use DV for 1D data**, which it handles natively.
 
 - **A stale or wrong launchd `DISPLAY` can send the GUIs to a dead X server.**
   If `launchctl getenv DISPLAY` points at a server that isn't running, or
