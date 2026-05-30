@@ -190,14 +190,24 @@ clang myprog.c -I install/include -L install/lib -lbbhutil \
 
 ## Known issues
 
-- **xvs can exit on an intermittent `BadDrawable` (X_CopyArea) error.** The xvs
-  GUI launches and renders, but on XQuartz it sometimes hits this X protocol
-  error and exits a few seconds in (a documented quirk of these xforms apps on
-  modern X11; Xlib's default handler turns any X error into `exit()`). It is
-  intermittent — some sessions run fine. **DV is unaffected.** If you rely on
-  1D xvs and hit this, worth trying: update XQuartz, toggle its GLX setting
-  (`defaults write org.xquartz.X11 enable_iglx -bool false`, restart XQuartz),
-  or use DV for 1D data too (it handles 1D as well).
+- **xvs exits on a `BadDrawable` (X_CopyArea) error when data is sent.** The xvs
+  GUI launches and renders, but the *first plot redraw* (triggered by
+  `sdftoxvs`) issues a BadDrawable on XQuartz and Xlib's default handler turns
+  it into `exit()`. In testing this was **deterministic on the data push** (8/8
+  trials), not random — a sit-idle xvs stays up; pushing data kills it.
+  Toggling XQuartz indirect GLX (`enable_iglx` on **and** off, with restarts)
+  made **no difference** — so it is not a GLX-mode issue. **DV is unaffected**
+  and handles 1D data too, so the practical workaround is to use DV for 1D.
+  (A proper fix would require patching xvs's redraw path; not yet found.)
+
+- **A stale `org.macports.startx` launchd agent can hijack `DISPLAY`.** If
+  `launchctl getenv DISPLAY` shows a `.../org.macports:0` path (a leftover that
+  can exist even on brew-only systems) or XQuartz comes up on `:1` instead of
+  `:0`, hardcoding `DISPLAY=:0` sends the GUIs to a dead server and no window
+  appears. `env.sh` handles this by **probing each candidate display and using
+  the first that answers**, so it works regardless. If things still seem stuck,
+  **log out and back in** — XQuartz's first run after install needs a fresh
+  login to register its launchd agent cleanly.
 
 ---
 
