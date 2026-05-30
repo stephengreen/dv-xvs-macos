@@ -191,15 +191,18 @@ clang myprog.c -I install/include -L install/lib -lbbhutil \
 
 ## Known issues
 
-- **xvs exits on a `BadDrawable` (X_CopyArea) error when data is sent.** The xvs
-  GUI launches and renders, but the *first plot redraw* (triggered by
-  `sdftoxvs`) issues a BadDrawable on XQuartz and Xlib's default handler turns
-  it into `exit()`. In testing this was **deterministic on the data push** (8/8
-  trials), not random — a sit-idle xvs stays up; pushing data kills it.
-  Toggling XQuartz indirect GLX (`enable_iglx` on **and** off, with restarts)
-  made **no difference** — so it is not a GLX-mode issue. **DV is unaffected**
-  and handles 1D data too, so the practical workaround is to use DV for 1D.
-  (A proper fix would require patching xvs's redraw path; not yet found.)
+- **xvs opens, but its plot canvas can't render on XQuartz; pushing data exits
+  it.** Sending an SDF with `sdftoxvs` triggers a cascade of X errors on the GL
+  plot canvas — a `BadDrawable` on `X_CopyArea` (xforms' backing-store blit)
+  **and** `GLXBadCurrentWindow` on `glXSwapBuffers` — and Xlib's default handler
+  turns the first into `exit()`. Deterministic on the data push, not random.
+  Installing a non-fatal `XSetErrorHandler` *does* stop the exit, but then the
+  canvas comes up **blank and the buttons are dead** — so the errors are real
+  (an invalid GL drawable/window), not spurious, and suppressing them is not a
+  fix. The root cause is xvs's GL-canvas window/context setup on XQuartz;
+  notably **DV renders fine through the same XQuartz GLX**, so this is an
+  xvs-specific setup bug, not an XQuartz limitation — but it remains unfixed.
+  **Practical workaround: use DV for 1D data**, which it handles natively.
 
 - **A stale or wrong launchd `DISPLAY` can send the GUIs to a dead X server.**
   If `launchctl getenv DISPLAY` points at a server that isn't running, or
