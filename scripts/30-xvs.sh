@@ -9,6 +9,8 @@
 #     gfortran does not provide. This macro maps them to the real
 #     _gfortran_specific__*_r8 symbols.
 #   * ffmpeg must be installed (00-deps) or configure aborts on the MPEG check.
+#   * cb.c mouse-query guards (below) + the xforms fli_show_object_pixmap guard
+#     (in 20-xforms.sh) together fix the long-standing xvs crash on data push.
 ###############################################################################
 set -euo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
@@ -18,10 +20,17 @@ fetch "$XVS_URL" "$DIST/xvs.tar.gz"
 rm -rf "$BUILD/xvs"
 tar xzf "$DIST/xvs.tar.gz" -C "$BUILD"
 
-# NOTE: xvs's GUI launches and renders fine, but on XQuartz it can hit an
-# intermittent "BadDrawable / X_CopyArea" error and exit (a documented quirk of
-# these xforms apps on modern X11). DV is unaffected. No reliable in-tree fix
-# was found; left as a known issue. See README "Known issues".
+# macOS/XQuartz fix (other half of the xvs crash fix; see also 20-xforms.sh):
+# xvs's idle callback polls the mouse against canvas windows via XQueryPointer.
+# On XQuartz, hiding a GL canvas during the panel repanel tears down its window,
+# so the query BadWindow-crashes. Guard the 4 mouse-query helpers in cb.c to skip
+# hidden / null-window canvases (a hidden canvas can't contain the mouse anyway).
+say "xvs: patch cb.c mouse-query guards (macOS/XQuartz BadWindow fix)"
+perl -0pi -e 's{if\( !gl \) return 0;\n\n   win = fl_get_real_object_window\(gl\);\n   fl_get_win_mouse\(win,&mouse_x,&mouse_y,&mouse_mask\);}{if( !gl || !gl->visible ) return 0;\n\n   win = fl_get_real_object_window(gl);\n   if( !win ) return 0;\n   fl_get_win_mouse(win,&mouse_x,&mouse_y,&mouse_mask);}g' \
+  "$BUILD/xvs/src/cb.c"
+[ "$(grep -c '!gl->visible' "$BUILD/xvs/src/cb.c")" -eq 4 ] \
+  || die "cb.c mouse-query guards did not apply to all 4 sites"
+echo "  patched cb.c (4 guards)"
 
 export INCLUDE_PATHS="$PREFIX/include $X11/include $JPEG/include"
 export LIB_PATHS="$PREFIX/lib $X11/lib $JPEG/lib $GFORTLIB"

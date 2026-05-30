@@ -14,6 +14,19 @@ fetch "$XFORMS_URL" "$DIST/xforms-1.2.4.tar.gz"
 rm -rf "$BUILD/xforms-1.2.4"
 tar xzf "$DIST/xforms-1.2.4.tar.gz" -C "$BUILD"
 
+# macOS/XQuartz fix (half of the xvs crash fix; see also 30-xvs.sh): the object
+# back-pixmap blit fli_show_object_pixmap() lacks the `w/h <= 0` guard that its
+# sibling fli_show_form_pixmap() has. During xvs's panel repanel a widget can go
+# momentarily zero-height; the unguarded version then issues a degenerate
+# X_CopyArea that XQuartz rejects with BadDrawable, and Xlib's default handler
+# exit()s the GUI. Add the missing guard (parity with the form-pixmap version).
+say "xforms 1.2.4: patch fli_show_object_pixmap (macOS/XQuartz BadDrawable fix)"
+perl -0pi -e 's{(\|\| ! p->win\n)(\s*)(\|\| NON_SQB\( obj \) \))}{$1$2|| p->w <= 0\n$2|| p->h <= 0\n$2$3}' \
+  "$BUILD/xforms-1.2.4/lib/xsupport.c"
+[ "$(grep -c 'p->w <= 0' "$BUILD/xforms-1.2.4/lib/xsupport.c")" -eq 2 ] \
+  || die "xsupport.c fli_show_object_pixmap guard did not apply"
+echo "  patched xsupport.c"
+
 export CFLAGS="-O2 $LENIENT -I$X11/include -I$JPEG/include"
 export CXXFLAGS="-O2 -I$X11/include -I$JPEG/include"
 export CPPFLAGS="-I$X11/include -I$JPEG/include"

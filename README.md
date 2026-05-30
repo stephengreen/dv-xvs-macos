@@ -121,6 +121,22 @@ DV's auto-detected `LIBS` omits GLUT/GLU; we pass them explicitly via
 `XTRALIBS="-lglut -lGLU -lGL -lXext -lXmu -lXi -lX11"` (all shipped inside
 XQuartz).
 
+### 6. xvs crash on data push — repanel window guards *(xforms + xvs)*
+On XQuartz, pushing data caused xvs to `exit()` on an X protocol error. The flaw
+is latent in xvs's decades-old code: a native Linux X server keeps the relevant
+windows valid, so it never manifests there, while XQuartz's stricter window
+lifecycle invalidates them and exposes the bug. Root-caused via lldb to xvs's
+panel **repanel** — rebuilding the plot panels on each data insert briefly leaves
+canvases in invalid window states that XQuartz rejects. Two one-spot guards fix it:
+- **xforms `xsupport.c`** — `fli_show_object_pixmap()` lacked the `w/h <= 0`
+  guard its sibling `fli_show_form_pixmap()` has, so a momentarily zero-height
+  widget issued a degenerate `X_CopyArea` → `BadDrawable`. (Patched in `20-xforms.sh`.)
+- **xvs `cb.c`** — the 4 mouse-query helpers ran `XQueryPointer` against hidden
+  canvases whose windows XQuartz had torn down → `BadWindow`. They now skip
+  hidden / null-window canvases. (Patched in `30-xvs.sh`.)
+DV is unaffected (it never repanels), and the xforms guard only skips zero-size
+blits, so it cannot change DV's rendering.
+
 Plus modern-clang hygiene applied throughout: `-fcommon` and
 `-Wno-error=implicit-function-declaration,implicit-int,int-conversion,…` so the
 legacy C compiles; and Fortran's `-fno-second-underscore` is kept **off** the
@@ -190,23 +206,6 @@ clang myprog.c -I install/include -L install/lib -lbbhutil \
 ---
 
 ## Known issues
-
-- **xvs opens, but pushing data exits it on XQuartz.** Root cause confirmed by
-  lldb backtrace: when the first SDF arrives via `sdftoxvs`, xvs's
-  `xvs_open_and_repanel` tears down and rebuilds its plot panels, then fires an
-  xforms `redraw` that blits a widget's double-buffer backing pixmap
-  (`fli_show_object_pixmap` → `X_CopyArea`) to a **window the repanel just
-  invalidated** → `BadDrawable`, which Xlib's default handler turns into
-  `exit()`. Deterministic on the data push. The `GLXBadCurrentWindow` GL errors
-  seen with a debug error-handler are *downstream* symptoms, **not** the cause —
-  and GL context-sharing is not involved either (a no-share build crashes
-  identically). A blanket `XSetErrorHandler` stops the exit but leaves a blank
-  canvas with dead buttons, because `fli_show_object_pixmap` then sets
-  `form->window` to the same stale handle — so suppression isn't a fix. A real
-  fix means reworking xvs's realize-before-redraw ordering in the repanel path
-  (`xvs_open_and_repanel` / `mfl.c`); involved and currently unfixed. **DV
-  doesn't repanel on data arrival, so it's unaffected — practical workaround:
-  use DV for 1D data**, which it handles natively.
 
 - **A stale or wrong launchd `DISPLAY` can send the GUIs to a dead X server.**
   If `launchctl getenv DISPLAY` points at a server that isn't running, or
