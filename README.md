@@ -188,6 +188,19 @@ clang myprog.c -I install/include -L install/lib -lbbhutil \
 
 ---
 
+## Known issues
+
+- **xvs can exit on an intermittent `BadDrawable` (X_CopyArea) error.** The xvs
+  GUI launches and renders, but on XQuartz it sometimes hits this X protocol
+  error and exits a few seconds in (a documented quirk of these xforms apps on
+  modern X11; Xlib's default handler turns any X error into `exit()`). It is
+  intermittent — some sessions run fine. **DV is unaffected.** If you rely on
+  1D xvs and hit this, worth trying: update XQuartz, toggle its GLX setting
+  (`defaults write org.xquartz.X11 enable_iglx -bool false`, restart XQuartz),
+  or use DV for 1D data too (it handles 1D as well).
+
+---
+
 ## Credits & license
 
 RNPL, xvs, and DV are by **Matthew W. Choptuik** (UBC) and collaborators;

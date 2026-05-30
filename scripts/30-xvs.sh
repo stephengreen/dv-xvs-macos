@@ -18,6 +18,11 @@ fetch "$XVS_URL" "$DIST/xvs.tar.gz"
 rm -rf "$BUILD/xvs"
 tar xzf "$DIST/xvs.tar.gz" -C "$BUILD"
 
+# NOTE: xvs's GUI launches and renders fine, but on XQuartz it can hit an
+# intermittent "BadDrawable / X_CopyArea" error and exit (a documented quirk of
+# these xforms apps on modern X11). DV is unaffected. No reliable in-tree fix
+# was found; left as a known issue. See README "Known issues".
+
 export INCLUDE_PATHS="$PREFIX/include $X11/include $JPEG/include"
 export LIB_PATHS="$PREFIX/lib $X11/lib $JPEG/lib $GFORTLIB"
 
