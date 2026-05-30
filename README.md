@@ -134,9 +134,10 @@ C/clang link line (it isn't a clang flag) while the gfortran runtime
 `source env.sh` sets four things that matter on macOS:
 
 - **`PATH`** / **`DYLD_FALLBACK_LIBRARY_PATH`** → the local `install/` tree.
-- **`DISPLAY=:0`** → XQuartz. Forced to `:0` because a stale launchd `DISPLAY`
-  (e.g. an `org.macports:0` path) makes the GUIs connect to the wrong server and
-  **no window appears**.
+- **`DISPLAY`** → XQuartz. Auto-detected rather than hardcoded: `env.sh` probes
+  each candidate display (the launchd value, `:0`, `:1`, …) and keeps the first
+  that actually answers, so it still works if XQuartz comes up on `:1` or a
+  stale launchd `DISPLAY` points at a dead server.
 - **`HOSTNAME=localhost`, `XVSHOST=localhost`, `DVHOST=localhost`** → the crucial
   one. xvs/DV use a **client/server socket model**: the GUI is a server that
   binds to the address of its hostname, and the `sdfto*` tools are clients that
@@ -179,7 +180,7 @@ clang myprog.c -I install/include -L install/lib -lbbhutil \
 | Symptom | Fix |
 |---|---|
 | `ser0_start: ... Unknown host` / client `Connect failed` | `source env.sh` (sets `HOSTNAME=localhost`). |
-| GUI launches but **no window** | XQuartz not running (`open -a XQuartz`) or wrong `DISPLAY`; `env.sh` forces `:0`. |
+| GUI launches but **no window** | XQuartz not running (`open -a XQuartz`) or wrong `DISPLAY`; `env.sh` auto-detects the live display. |
 | `configure: error` after "Can't find an MPEG encoder" | `brew install ffmpeg` (or `export MPEG_ENCODER=none`). |
 | `Undefined symbols: _d_sin, _d_abs, …` (xvs) | the `-DGFORTRAN43_OR_LATER` fix — rerun `./install.sh xvs`. |
 | `'sys/sysmacros.h' file not found` | the bundle patch — rerun `./install.sh bundle`. |
@@ -200,12 +201,11 @@ clang myprog.c -I install/include -L install/lib -lbbhutil \
   and handles 1D data too, so the practical workaround is to use DV for 1D.
   (A proper fix would require patching xvs's redraw path; not yet found.)
 
-- **A stale `org.macports.startx` launchd agent can hijack `DISPLAY`.** If
-  `launchctl getenv DISPLAY` shows a `.../org.macports:0` path (a leftover that
-  can exist even on brew-only systems) or XQuartz comes up on `:1` instead of
-  `:0`, hardcoding `DISPLAY=:0` sends the GUIs to a dead server and no window
-  appears. `env.sh` handles this by **probing each candidate display and using
-  the first that answers**, so it works regardless. If things still seem stuck,
+- **A stale or wrong launchd `DISPLAY` can send the GUIs to a dead X server.**
+  If `launchctl getenv DISPLAY` points at a server that isn't running, or
+  XQuartz comes up on `:1` instead of `:0`, a hardcoded `DISPLAY=:0` produces no
+  window. `env.sh` avoids this by **probing each candidate display and using the
+  first that answers**, so it works regardless. If things still seem stuck,
   **log out and back in** — XQuartz's first run after install needs a fresh
   login to register its launchd agent cleanly.
 
@@ -213,8 +213,33 @@ clang myprog.c -I install/include -L install/lib -lbbhutil \
 
 ## Credits & license
 
-RNPL, xvs, and DV are by **Matthew W. Choptuik** (UBC) and collaborators;
-the patched **xforms 1.2.4** is also redistributed by UBC. This repo contains
-**only** build scripts and documentation — it downloads the upstream sources at
-build time and does not redistribute them. All rights to those packages remain
-with their authors. Report tool bugs to UBC; report build-script issues here.
+**This repository redistributes none of the upstream code.** It contains only
+the original build scripts (`install.sh`, `scripts/`), `env.sh`, the
+`examples/`, and this documentation. The upstream packages are downloaded from
+the UBC server at build time and compiled on your machine; no upstream source
+or binary is checked in here or shipped by this repo.
+
+Upstream packages and their copyright holders (all rights reserved by their
+authors — consult each package for terms before redistributing it yourself):
+
+- **RNPL** and the **SDF / `bbhutil`** library — © Robert L. Marsa and
+  Matthew W. Choptuik. Marked "all rights reserved"; no separate license file
+  ships with the distribution.
+- **xvs** and **DV** — © Matthew W. Choptuik (UBC). xvs carries
+  `Copyright 1990–2003 Matthew William Choptuik. All rights reserved.`
+- **xforms 1.2.4** — © T.C. Zhao and Mark Overmars, distributed under the
+  **GNU LGPL** (see the `COPYING.LIB` in its tarball); redistributed by UBC.
+- The bundled **netlib** math packages (BLAS/LAPACK/LINPACK/ODEPACK/FFTPACK)
+  are public-domain / freely distributable from netlib.org.
+
+Because the upstream tools are "all rights reserved" with no accompanying open
+license, this project deliberately **builds them from the original download
+rather than mirroring them.** If you want to mirror or vendor those sources,
+ask the authors (Matt Choptuik, `choptuik@physics.ubc.ca`) for permission first.
+
+The original contents of this repository (scripts, `env.sh`, `examples/`, docs)
+are licensed under the **MIT License** — see [`LICENSE`](LICENSE).
+
+Report bugs in the **tools themselves** to their maintainer, Matt Choptuik
+(`choptuik@physics.ubc.ca`) — per the upstream docs. Report problems with
+**this repo's build scripts** here.
